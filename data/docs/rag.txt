@@ -1,0 +1,5 @@
+Retrieval-Augmented Generation, commonly called RAG, combines retrieval with a large language model. Documents are
+collected, parsed, split into chunks, converted into embeddings, and stored in a vector database. At query time,
+the user question is embedded and the vector database retrieves relevant chunks. Those chunks are provided to the
+language model as context so the model can answer using external knowledge. The indexing pipeline is usually
+offline or batch oriented, while retrieval and answer generation are usually online and latency sensitive.

@@ -1,0 +1,5 @@
+CREATE DATABASE ragdb;
+
+\connect ragdb
+
+CREATE EXTENSION IF NOT EXISTS vector;

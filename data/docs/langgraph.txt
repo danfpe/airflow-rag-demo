@@ -1,0 +1,5 @@
+LangGraph is designed for stateful LLM and agent workflows. It can orchestrate nodes such as a planner, retriever,
+tools, model calls, validation, retries, and human approval inside an agent flow. Airflow and LangGraph solve
+different orchestration problems. Airflow is a strong fit for scheduled or event-driven batch jobs such as document
+ingestion and vector index refresh. LangGraph is a strong fit for online agent execution where a user's request
+moves through reasoning, retrieval, tools, and an LLM before returning a response.

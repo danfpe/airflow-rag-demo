@@ -1,0 +1,6 @@
+Apache Airflow is a workflow orchestration platform. A workflow is represented as a DAG, a directed acyclic graph.
+The DAG defines tasks and their dependencies. The scheduler examines DAG runs and task states, determines which
+tasks are ready after their upstream dependencies succeed, and sends runnable tasks to an executor. The executor
+runs those tasks using the configured execution model. Airflow also tracks task state, retries failed work,
+stores metadata, exposes logs in the UI, and can schedule recurring batch pipelines. Airflow is especially useful
+for data engineering, ETL, machine learning pipelines, document ingestion, and offline RAG indexing workflows.
