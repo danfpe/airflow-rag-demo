@@ -85,9 +85,23 @@ jobs:
 
       - name: Verify Kubernetes access
         run: |
-          kubectl get namespace uat
-          kubectl auth can-i create deployments -n uat
-          kubectl auth can-i create deployments -n prod
+          echo "Checking UAT access..."
+
+          if ! kubectl auth can-i create deployments -n uat; then
+            echo "ERROR: UAT role cannot deploy to UAT"
+            exit 1
+          fi
+
+          echo "UAT access: OK"
+
+          echo "Checking that UAT role cannot access PROD..."
+
+          if kubectl auth can-i create deployments -n prod; then
+            echo "ERROR: UAT role unexpectedly has PROD deployment permission"
+            exit 1
+          else
+            echo "PROD isolation: OK"
+          fi
 
       - name: Add Airflow Helm repository
         run: |
@@ -143,11 +157,25 @@ jobs:
             --name ${{ vars.EKS_CLUSTER }} \
             --region ${{ vars.AWS_REGION }}
 
-      - name: Verify Kubernetes access
+      - name: Verify PROD Kubernetes access
         run: |
-          kubectl get namespace prod
-          kubectl auth can-i create deployments -n prod
-          kubectl auth can-i create deployments -n uat
+          echo "Checking PROD access..."
+
+          if ! kubectl auth can-i create deployments -n prod; then
+            echo "ERROR: PROD role cannot deploy to PROD"
+            exit 1
+          fi
+
+          echo "PROD access: OK"
+
+          echo "Checking that PROD role cannot access UAT..."
+
+          if kubectl auth can-i create deployments -n uat; then
+            echo "ERROR: PROD role unexpectedly has UAT deployment permission"
+            exit 1
+          else
+            echo "UAT isolation: OK"
+          fi
 
       - name: Add Airflow Helm repository
         run: |
