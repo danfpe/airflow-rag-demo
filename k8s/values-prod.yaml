@@ -1,0 +1,20 @@
+airflowVersion: "3.3.1"
+
+executor: LocalExecutor
+
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: false
+
+redis:
+  enabled: false
+
+logs:
+  persistence:
+    enabled: false
+
+apiServer:
+  service:
+    type: ClusterIP

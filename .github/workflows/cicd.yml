@@ -1,0 +1,173 @@
+name: Airflow CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  # =========================================================
+  # CI: BUILD ONCE AND PUSH TO ECR
+  # =========================================================
+  build:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.BUILD_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }} \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Print image
+        run: |
+          echo "Built image:"
+          echo "${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
+
+
+  # =========================================================
+  # CD: DEPLOY THE SAME IMAGE TO UAT
+  # =========================================================
+  deploy-uat:
+    name: Deploy to UAT
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: uat
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ vars.EKS_CLUSTER }} \
+            --region ${{ vars.AWS_REGION }}
+
+      - name: Verify Kubernetes access
+        run: |
+          kubectl get namespace uat
+          kubectl auth can-i create deployments -n uat
+          kubectl auth can-i create deployments -n prod
+
+      - name: Add Airflow Helm repository
+        run: |
+          helm repo add apache-airflow https://airflow.apache.org
+          helm repo update
+
+      - name: Deploy Airflow to UAT
+        run: |
+          helm upgrade --install airflow \
+            apache-airflow/airflow \
+            --version 1.22.0 \
+            --namespace uat \
+            -f k8s/values-uat.yaml \
+            --set images.airflow.repository=${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }} \
+            --set images.airflow.tag=${{ github.sha }} \
+            --wait \
+            --timeout 15m
+
+      - name: Verify UAT
+        run: |
+          kubectl get pods -n uat
+          kubectl get svc -n uat
+          helm status airflow -n uat
+
+
+  # =========================================================
+  # CD: APPROVAL THEN PROMOTE SAME IMAGE TO PROD
+  # =========================================================
+  deploy-prod:
+    name: Deploy to PROD
+    needs: deploy-uat
+    runs-on: ubuntu-latest
+
+    environment:
+      name: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ vars.EKS_CLUSTER }} \
+            --region ${{ vars.AWS_REGION }}
+
+      - name: Verify Kubernetes access
+        run: |
+          kubectl get namespace prod
+          kubectl auth can-i create deployments -n prod
+          kubectl auth can-i create deployments -n uat
+
+      - name: Add Airflow Helm repository
+        run: |
+          helm repo add apache-airflow https://airflow.apache.org
+          helm repo update
+
+      - name: Deploy same image to PROD
+        run: |
+          helm upgrade --install airflow \
+            apache-airflow/airflow \
+            --version 1.22.0 \
+            --namespace prod \
+            -f k8s/values-prod.yaml \
+            --set images.airflow.repository=${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }} \
+            --set images.airflow.tag=${{ github.sha }} \
+            --wait \
+            --timeout 15m
+
+      - name: Verify PROD
+        run: |
+          kubectl get pods -n prod
+          kubectl get svc -n prod
+          helm status airflow -n prod
